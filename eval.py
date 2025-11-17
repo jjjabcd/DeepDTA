@@ -1,109 +1,73 @@
 import os
 import argparse
-import numpy as np
 import pandas as pd
-from sklearn.metrics import mean_absolute_error
-from scipy.stats import pearsonr
-import tensorflow as tf
-from tensorflow.keras import layers, models
 
-# ------------------ Tokenizers ------------------
-SMILES_VOCAB = list("#%)(+-.0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ@[]\\abdefghilmnoprstuy")
-FASTA_VOCAB  = list("ACDEFGHIKLMNPQRSTVWY")
+from src.metric import get_rmse, get_pcc, get_cindex, get_rm2
 
-def build_char_index(vocab):
-    return {ch: i + 1 for i, ch in enumerate(vocab)}
+def evaluate(args):
+    if not os.path.exists(args.pred_csv):
+        raise FileNotFoundError(f"[Error] pred_csv not found: {args.pred_csv}")
 
-SMILES_INDEX = build_char_index(SMILES_VOCAB)
-FASTA_INDEX  = build_char_index(FASTA_VOCAB)
+    df = pd.read_csv(args.pred_csv)
 
-def encode_sequence(seq, index, max_len):
-    seq = str(seq)
-    ids = [index.get(ch, 0) for ch in seq[:max_len]]
-    return np.array(ids + [0] * (max_len - len(ids)), dtype=np.int32)
-
-
-# ------------------ Model ------------------
-def build_deepdta_like_model(smiles_len=150, fasta_len=1000,
-                             smiles_vocab_size=len(SMILES_INDEX) + 1,
-                             fasta_vocab_size=len(FASTA_INDEX) + 1,
-                             emb_dim=128):
-
-    inp_smi = layers.Input(shape=(smiles_len,), name="smiles")
-    x = layers.Embedding(smiles_vocab_size, emb_dim)(inp_smi)
-    x = layers.Conv1D(32, 4, activation="relu")(x)
-    x = layers.Conv1D(64, 4, activation="relu")(x)
-    x = layers.Conv1D(96, 4, activation="relu")(x)
-    x = layers.GlobalMaxPooling1D()(x)
-
-    inp_fa = layers.Input(shape=(fasta_len,), name="fasta")
-    y = layers.Embedding(fasta_vocab_size, emb_dim)(inp_fa)
-    y = layers.Conv1D(32, 8, activation="relu")(y)
-    y = layers.Conv1D(64, 8, activation="relu")(y)
-    y = layers.Conv1D(96, 8, activation="relu")(y)
-    y = layers.GlobalMaxPooling1D()(y)
-
-    z = layers.Concatenate()([x, y])
-    z = layers.Dense(1024, activation="relu")(z)
-    z = layers.Dropout(0.2)(z)
-    z = layers.Dense(1024, activation="relu")(z)
-    z = layers.Dropout(0.2)(z)
-    z = layers.Dense(512, activation="relu")(z)
-    out = layers.Dense(1)(z)
-
-    return models.Model(inputs=[inp_smi, inp_fa], outputs=out)
-
-
-# ------------------ Evaluate ------------------
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--test_csv", type=str, required=True)
-    parser.add_argument("--weights", type=str, required=True)
-    parser.add_argument("--task_name", type=str, required=True, choices=["Kd", "Ki"])
-    parser.add_argument("--smiles_max_len", type=int, default=150)
-    parser.add_argument("--fasta_max_len", type=int, default=1000)
-    parser.add_argument("--out_csv", type=str, default="predictions.csv")
-    parser.add_argument("--out_metrics", type=str, default="metrics.txt")
-    args = parser.parse_args()
-
-    df = pd.read_csv(args.test_csv)
-
-    # label column
-    label_col = "pKd" if args.task_name == "Kd" else "pKi"
-
-    # Encode all inputs
-    Xs = np.stack([encode_sequence(s, SMILES_INDEX, args.smiles_max_len) for s in df["SMILES"]])
-    Xf = np.stack([encode_sequence(s, FASTA_INDEX, args.fasta_max_len) for s in df["FASTA"]])
-
-    # Build & load model
-    model = build_deepdta_like_model(args.smiles_max_len, args.fasta_max_len)
-    model.load_weights(args.weights)
-
-    preds = model.predict({"smiles": Xs, "fasta": Xf}, verbose=0).reshape(-1)
-
-    df["prediction_value"] = preds
-
-    # Metrics
-    y_true = df[label_col].values
-    mae = mean_absolute_error(y_true, preds)
-    rmse = np.sqrt(np.mean((y_true - preds) ** 2))
-
-    if np.std(preds) > 1e-9 and np.std(y_true) > 1e-9:
-        pcc = pearsonr(y_true, preds)[0]
+    # Determine label column
+    if args.task_name == "Kd":
+        candidates = ["pKd", "affinity"]
+    elif args.task_name == "Ki":
+        candidates = ["pKi", "affinity"]
     else:
-        pcc = float("nan")
+        raise ValueError(f"[Error] Invalid task_name: {args.task_name}")
 
-    # Save predictions & metrics
-    df.to_csv(args.out_csv, index=False)
+    label_col = None
+    for c in candidates:
+        if c in df.columns:
+            label_col = c
+            break
 
-    with open(args.out_metrics, "w") as f:
-        f.write(f"MAE: {mae:.4f}\nRMSE: {rmse:.4f}\nPCC: {pcc:.4f}\n")
+    if label_col is None:
+        raise ValueError(
+            f"[Error] Could not find label column among {candidates}. "
+            f"Available columns: {df.columns.tolist()}"
+        )
 
-    print("=== Evaluation Done ===")
-    print("Saved predictions →", args.out_csv)
-    print("Saved metrics     →", args.out_metrics)
-    print(f"MAE: {mae:.4f} | RMSE: {rmse:.4f} | PCC: {pcc:.4f}")
+    if "prediction_value" not in df.columns:
+        raise ValueError("[Error] Column 'prediction_value' not found in pred_csv.")
 
+    y_true = df[label_col].values
+    y_pred = df["prediction_value"].values
+
+    rmse = float(get_rmse(y_true, y_pred))
+    pcc  = float(get_pcc(y_true, y_pred))
+    cidx = float(get_cindex(y_true, y_pred))
+    rm2  = float(get_rm2(y_true, y_pred))
+
+    metrics_df = pd.DataFrame(
+        [{
+            "task_name": args.task_name,
+            "n_samples": len(y_true),
+            "rmse": rmse,
+            "pcc": pcc,
+            "cindex": cidx,
+            "rm2": rm2,
+        }]
+    )
+
+    os.makedirs(os.path.dirname(args.out_metrics), exist_ok=True)
+    metrics_df.to_csv(args.out_metrics, index=False)
+
+    print(f"[Info] RMSE   : {rmse:.4f}")
+    print(f"[Info] PCC    : {pcc:.4f}")
+    print(f"[Info] C-index: {cidx:.4f}")
+    print(f"[Info] RM2    : {rm2:.4f}")
+    print(f"[Info] Metrics saved → {args.out_metrics}")
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task_name", type=str, required=True, choices=["Kd", "Ki"])
+    parser.add_argument("--pred_csv", type=str, required=True)
+    parser.add_argument("--out_metrics", type=str, required=True)
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    main()
+    args = get_args()
+    evaluate(args)
