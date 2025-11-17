@@ -10,7 +10,7 @@ if [ -z "$FOLD" ] || [ -z "$GPU_ID" ]; then
 fi
 
 TASK_NAME="Kd"
-ROOT="/home/rlawlsgurjh/hdd/work/ChEMBL/data/processed/${TASK_NAME}/fold${FOLD_NUM}"
+ROOT="/home/rlawlsgurjh/hdd/work/ChEMBL/data/processed/${TASK_NAME}/fold${FOLD}"
 TRAIN_CSV="${ROOT}/train.csv"
 VAL_CSV="${ROOT}/val.csv"
 TEST_CSV="${ROOT}/test.csv"
@@ -19,6 +19,7 @@ OUT_DIR="./results/${TASK_NAME}/fold_${FOLD}"
 
 echo "--- Starting Fold ${FOLD} on GPU ${GPU_ID} ---"
 echo "Train file: ${TRAIN_CSV}"
+echo "Val file: ${VAL_CSV}"
 echo "Test file: ${TEST_CSV}"
 echo "Output dir: ${OUT_DIR}"
 
@@ -30,7 +31,6 @@ python train_from_csv.py \
     --train_csv "${TRAIN_CSV}" \
     --val_csv "${VAL_CSV}" \
     --test_csv "${TEST_CSV}" \
-    --label_col affinity \
     --out_dir "${OUT_DIR}" \
     --epochs 1000 \
     --batch_size 256 \

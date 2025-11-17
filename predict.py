@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, models
+import pandas as pd
 
 # ------------------ Tokenizers ------------------
 SMILES_VOCAB = list("#%)(+-.0123456789=ABCDEFGHIJKLMNOPQRSTUVWXYZ@[]\\abdefghilmnoprstuy")
@@ -52,42 +53,33 @@ def build_deepdta_like_model(smiles_len=150, fasta_len=1000,
     return models.Model(inputs=[inp_smi, inp_fa], outputs=out)
 
 
-# ------------------ Main Predict ------------------
+def predict_from_csv(test_csv, weights, out_csv, smiles_max_len=150, fasta_max_len=1000):
+    df = pd.read_csv(test_csv)
+
+    xs = np.stack([encode_sequence(s, SMILES_INDEX, smiles_max_len) for s in df["SMILES"]])
+    xf = np.stack([encode_sequence(s, FASTA_INDEX, fasta_max_len) for s in df["FASTA"]])
+
+    model = build_deepdta_like_model(smiles_max_len, fasta_max_len)
+    model.load_weights(weights)
+
+    preds = model.predict({"smiles": xs, "fasta": xf}, verbose=0).reshape(-1)
+
+    df["predicted_value"] = preds
+    df.to_csv(out_csv, index=False)
+
+    print(f"[+] Saved predictions → {out_csv}")
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--smiles", type=str, required=True)
-    parser.add_argument("--fasta", type=str, required=True)
-    parser.add_argument("--weights", type=str, required=True)
+    parser.add_argument("--test_csv", required=True)
+    parser.add_argument("--weights", required=True)
+    parser.add_argument("--out_csv", required=True)
     parser.add_argument("--smiles_max_len", type=int, default=150)
     parser.add_argument("--fasta_max_len", type=int, default=1000)
-    parser.add_argument("--out_file", type=str, default="")
     args = parser.parse_args()
 
-    # Encode inputs
-    xs = encode_sequence(args.smiles, SMILES_INDEX, args.smiles_max_len)[None, :]
-    xf = encode_sequence(args.fasta, FASTA_INDEX, args.fasta_max_len)[None, :]
-
-    # Build + load
-    if not os.path.isfile(args.weights):
-        raise FileNotFoundError(f"Weights not found: {args.weights}")
-
-    model = build_deepdta_like_model(args.smiles_max_len, args.fasta_max_len)
-    model.load_weights(args.weights)
-
-    # Predict
-    pred = model.predict({"smiles": xs, "fasta": xf}, verbose=0).reshape(-1)[0]
-    print(f"predicted_value: {float(pred):.6f}")
-
-    # Optional: Save to CSV
-    if args.out_file:
-        import csv
-        write_header = not os.path.exists(args.out_file)
-        with open(args.out_file, "a", newline="") as f:
-            w = csv.writer(f)
-            if write_header:
-                w.writerow(["SMILES", "FASTA", "predicted_value"])
-            w.writerow([args.smiles, args.fasta, float(pred)])
-
+    predict_from_csv(args.test_csv, args.weights, args.out_csv,
+                     args.smiles_max_len, args.fasta_max_len)
 
 if __name__ == "__main__":
     main()
