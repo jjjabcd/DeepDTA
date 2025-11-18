@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
 LOG_FILE="run_all_Kd.log"
 
 nohup bash -c '
@@ -10,8 +12,8 @@ for FOLD in 1 2 3
 do
   echo "--- FOLD ${FOLD} START ---"
 
-  bash scripts/Kd_train.sh ${FOLD} 2
-  bash scripts/Kd_predict.sh ${FOLD} 2
+  bash scripts/Kd_train.sh ${FOLD} 0 &&
+  bash scripts/Kd_predict.sh ${FOLD} 0 &&
   bash scripts/Kd_eval.sh ${FOLD}
 
   echo "--- FOLD ${FOLD} DONE ---"
@@ -20,3 +22,5 @@ done
 echo "===== Kd All-Fold Pipeline Finished at $(date) ====="
 
 ' > "$LOG_FILE" 2>&1 &
+
+echo "Started run_all_Kd.sh with PID: $!"

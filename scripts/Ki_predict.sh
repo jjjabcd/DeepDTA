@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Disable unnecessary TF logs and XLA
 export TF_CPP_MIN_LOG_LEVEL=3
 export TF_ENABLE_ONEDNN_OPTS=0
 export TF_XLA_FLAGS=--tf_xla_auto_jit=0
@@ -15,32 +16,28 @@ if [ -z "$FOLD" ] || [ -z "$GPU_ID" ]; then
   exit 1
 fi
 
-TASK_NAME="Kd"
+TASK_NAME="Ki"
 ROOT="/home/rlawlsgurjh/hdd/work/ChEMBL/data/processed/${TASK_NAME}/fold${FOLD}"
-TRAIN_CSV="${ROOT}/train.csv"
-VAL_CSV="${ROOT}/val.csv"
+
 TEST_CSV="${ROOT}/test.csv"
 
 OUT_DIR="./results/${TASK_NAME}/fold_${FOLD}"
+CKPT_PATH="${OUT_DIR}/best.h5"
+OUT_CSV="${OUT_DIR}/predictions.csv"
 
-echo "--- Starting Fold ${FOLD} on GPU ${GPU_ID} ---"
-echo " Train file: ${TRAIN_CSV}"
-echo " Val file  : ${VAL_CSV}"
-echo " Test file : ${TEST_CSV}"
-echo " Output dir: ${OUT_DIR}"
+echo "===== Predicting Fold ${FOLD} ====="
+echo " Checkpoint: ${CKPT_PATH}"
+echo " Test CSV : ${TEST_CSV}"
+echo " Output CSV: ${OUT_CSV}"
 
-python train_from_csv.py \
+python predict.py \
     --task_name "${TASK_NAME}" \
-    --train_csv "${TRAIN_CSV}" \
-    --val_csv "${VAL_CSV}" \
     --test_csv "${TEST_CSV}" \
-    --out_dir "${OUT_DIR}" \
-    --epochs 1000 \
-    --batch_size 1024 \
-    --seed 42 \
-    --patience 10 \
+    --ckpt_path "${CKPT_PATH}" \
     --smiles_max_len 100 \
     --fasta_max_len 1000 \
+    --batch_size 2048 \
+    --out_csv "${OUT_CSV}" \
     --gpu "${GPU_ID}"
 
-echo "--- Fold ${FOLD} training finished on GPU ${GPU_ID} ---"
+echo "===== Fold ${FOLD} Prediction Finished ====="

@@ -2,6 +2,9 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 from scipy.stats import pearsonr
 
+def get_mse(y_true, y_pred):
+    return mean_squared_error(y_true, y_pred)
+
 def get_rmse(y_true, y_pred):
     return np.sqrt(mean_squared_error(y_true, y_pred))
 

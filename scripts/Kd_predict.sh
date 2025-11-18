@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Disable unnecessary TF logs and XLA
+export TF_CPP_MIN_LOG_LEVEL=3
+export TF_ENABLE_ONEDNN_OPTS=0
+export TF_XLA_FLAGS=--tf_xla_auto_jit=0
+export PYTHONWARNINGS=ignore
+export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+
 FOLD=$1
 GPU_ID=$2
 
@@ -11,27 +18,25 @@ fi
 
 TASK_NAME="Kd"
 ROOT="/home/rlawlsgurjh/hdd/work/ChEMBL/data/processed/${TASK_NAME}/fold${FOLD}"
+
 TEST_CSV="${ROOT}/test.csv"
 
 OUT_DIR="./results/${TASK_NAME}/fold_${FOLD}"
-WEIGHTS="${OUT_DIR}/best.h5"
+CKPT_PATH="${OUT_DIR}/best.h5"
 OUT_CSV="${OUT_DIR}/predictions.csv"
 
 echo "===== Predicting Fold ${FOLD} ====="
-echo " Weight: ${WEIGHTS}"
-echo " Test  : ${TEST_CSV}"
-echo " Out   : ${OUT_CSV}"
+echo " Checkpoint: ${CKPT_PATH}"
+echo " Test CSV : ${TEST_CSV}"
+echo " Output CSV: ${OUT_CSV}"
 
-TF_CPP_MIN_LOG_LEVEL=3 \
-TF_ENABLE_ONEDNN_OPTS=0 \
-PYTHONWARNINGS=ignore \
 python predict.py \
     --task_name "${TASK_NAME}" \
     --test_csv "${TEST_CSV}" \
-    --weights "${WEIGHTS}" \
+    --ckpt_path "${CKPT_PATH}" \
     --smiles_max_len 100 \
     --fasta_max_len 1000 \
-    --batch_size 256 \
+    --batch_size 2048 \
     --out_csv "${OUT_CSV}" \
     --gpu "${GPU_ID}"
 

@@ -15,7 +15,7 @@ if [ -z "$FOLD" ] || [ -z "$GPU_ID" ]; then
   exit 1
 fi
 
-TASK_NAME="Kd"
+TASK_NAME="Ki"
 ROOT="/home/rlawlsgurjh/hdd/work/ChEMBL/data/processed/${TASK_NAME}/fold${FOLD}"
 TRAIN_CSV="${ROOT}/train.csv"
 VAL_CSV="${ROOT}/val.csv"
